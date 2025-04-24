@@ -3004,10 +3004,14 @@ ImFont* ImFontAtlas::AddFont(const ImFontConfig* font_cfg_in)
         font = Fonts.back();
     }
 
+    // Add to list
     Sources.push_back(*font_cfg_in);
     ImFontConfig* font_cfg = &Sources.back();
     if (font_cfg->DstFont == NULL)
         font_cfg->DstFont = font;
+    font->Sources.push_back(font_cfg);
+    ImFontAtlasBuildUpdatePointers(this); // Pointers to Sources are otherwise dangling after we called Sources.push_back().
+
     if (font_cfg->FontDataOwnedByAtlas == false)
     {
         font_cfg->FontDataOwnedByAtlas = true;
@@ -3031,10 +3035,7 @@ ImFont* ImFontAtlas::AddFont(const ImFontConfig* font_cfg_in)
     }
     IM_ASSERT(font_cfg->FontLoaderData == NULL);
 
-    // Pointers to Sources are otherwise dangling
-    font->Sources.push_back(font_cfg);
-    ImFontAtlasBuildUpdatePointers(this);
-    if (!ImFontAtlasFontInitSource(this, font_cfg))
+    if (!ImFontAtlasFontSourceInit(this, font_cfg))
     {
         // Rollback (this is a fragile/rarely exercised code-path. TestSuite's "misc_atlas_add_invalid_font" aim to test this)
         ImFontAtlasFontDestroySourceData(this, font_cfg);
@@ -3047,6 +3048,8 @@ ImFont* ImFontAtlas::AddFont(const ImFontConfig* font_cfg_in)
         }
         return NULL;
     }
+    ImFontAtlasFontSourceAddToFont(this, font, font_cfg);
+
     return font;
 }
 
@@ -3569,9 +3572,16 @@ void ImFontAtlasFontDestroyOutput(ImFontAtlas* atlas, ImFont* font)
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-bool ImFontAtlasFontInitSource(ImFontAtlas* atlas, ImFontConfig* src)
+bool ImFontAtlasFontSourceInit(ImFontAtlas* atlas, ImFontConfig* src)
 {
-    ImFont* font = src->DstFont;
+    const ImFontLoader* loader = src->FontLoader ? src->FontLoader : atlas->FontLoader;
+    if (loader->FontSrcInit != NULL && !loader->FontSrcInit(atlas, src))
+        return false;
+    return true;
+}
+
+void ImFontAtlasFontSourceAddToFont(ImFontAtlas* atlas, ImFont* font, ImFontConfig* src)
+{
     if (src->MergeMode == false)
     {
         font->ClearOutputData();
@@ -3579,14 +3589,8 @@ bool ImFontAtlasFontInitSource(ImFontAtlas* atlas, ImFontConfig* src)
         font->ContainerAtlas = atlas;
         IM_ASSERT(font->Sources[0] == src);
     }
-
-    const ImFontLoader* loader = src->FontLoader ? src->FontLoader : atlas->FontLoader;
-    if (loader->FontSrcInit != NULL && !loader->FontSrcInit(atlas, src))
-        return false;
-
     atlas->TexIsBuilt = false; // For legacy backends
     ImFontAtlasBuildSetupFontSpecialGlyphs(atlas, font, src);
-    return true;
 }
 
 void ImFontAtlasFontDestroySourceData(ImFontAtlas* atlas, ImFontConfig* src)
@@ -4110,6 +4114,11 @@ void ImFontAtlasBuildClear(ImFontAtlas* atlas)
     ImFontAtlasBuildDestroy(atlas);
     ImFontAtlasTextureAdd(atlas, new_tex_size.x, new_tex_size.y);
     ImFontAtlasBuildInit(atlas);
+    for (ImFontConfig& src : atlas->Sources)
+        ImFontAtlasFontSourceInit(atlas, &src);
+    for (ImFont* font : atlas->Fonts)
+        for (ImFontConfig* src : font->Sources)
+            ImFontAtlasFontSourceAddToFont(atlas, font, src);
 }
 
 // You should not need to call this manually!
@@ -4165,8 +4174,6 @@ void ImFontAtlasBuildInit(ImFontAtlas* atlas)
 
     // Register fonts
     ImFontAtlasBuildUpdatePointers(atlas);
-    for (ImFontConfig& cfg : atlas->Sources)
-        ImFontAtlasFontInitSource(atlas, &cfg);
 
     // Update UV coordinates etc. stored in bound ImDrawListSharedData instance
     ImFontAtlasUpdateDrawListsSharedData(atlas);
