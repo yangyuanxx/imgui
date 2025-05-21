@@ -32,8 +32,6 @@ DEFINES +=
 INCLUDES +=
 FORCE_INCLUDE +=
 ALL_CPPFLAGS += $(CPPFLAGS) -MD -MP $(DEFINES) $(INCLUDES)
-ALL_CFLAGS += $(CFLAGS) $(ALL_CPPFLAGS)
-ALL_CXXFLAGS += $(CXXFLAGS) $(ALL_CPPFLAGS) -std=c++17
 ALL_RESFLAGS += $(RESFLAGS) $(DEFINES) $(INCLUDES)
 LIBS +=
 LDDEPS +=
@@ -50,16 +48,22 @@ ifeq ($(config),debug)
 TARGETDIR = bin/Debug-macosx-ARM64/ImGui
 TARGET = $(TARGETDIR)/libImGui.a
 OBJDIR = bin-int/Debug-macosx-ARM64/ImGui
+ALL_CFLAGS += $(CFLAGS) $(ALL_CPPFLAGS) -g
+ALL_CXXFLAGS += $(CXXFLAGS) $(ALL_CPPFLAGS) -g -std=c++17
 
 else ifeq ($(config),release)
 TARGETDIR = bin/Release-macosx-ARM64/ImGui
 TARGET = $(TARGETDIR)/libImGui.a
 OBJDIR = bin-int/Release-macosx-ARM64/ImGui
+ALL_CFLAGS += $(CFLAGS) $(ALL_CPPFLAGS) -O2
+ALL_CXXFLAGS += $(CXXFLAGS) $(ALL_CPPFLAGS) -O2 -std=c++17
 
 else ifeq ($(config),dist)
 TARGETDIR = bin/Dist-macosx-ARM64/ImGui
 TARGET = $(TARGETDIR)/libImGui.a
 OBJDIR = bin-int/Dist-macosx-ARM64/ImGui
+ALL_CFLAGS += $(CFLAGS) $(ALL_CPPFLAGS)
+ALL_CXXFLAGS += $(CXXFLAGS) $(ALL_CPPFLAGS) -std=c++17
 
 endif
 
